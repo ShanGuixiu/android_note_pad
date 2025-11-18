@@ -18,13 +18,16 @@ package com.example.android.notepad;
 
 import com.example.android.notepad.NotePad;
 
+import android.app.AlertDialog;
 import android.app.ListActivity;
 import android.content.ClipboardManager;
 import android.content.ClipData;
 import android.content.ComponentName;
 import android.content.ContentUris;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
@@ -139,6 +142,9 @@ public class NotesList extends ListActivity {
 
         // Sets the ListView's adapter to be the cursor adapter that was just created.
         setListAdapter(adapter);
+
+        // 初始化背景
+        updateBackground();
     }
 
     /**
@@ -283,8 +289,56 @@ public class NotesList extends ListActivity {
             startActivity(new Intent(Intent.ACTION_PASTE, getIntent().getData()));
             return true;
         }
+        // 添加背景切换处理
+        if (item.getItemId() == R.id.menu_change_bg) {
+            showBackgroundChooser();
+            return true;
+        }
+
         return super.onOptionsItemSelected(item);
     }
+
+
+
+    // 在showBackgroundChooser方法中调整背景选项
+    private void showBackgroundChooser() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("选择背景色");
+
+        // 背景选项（仅淡色系）
+        final String[] bgOptions = {"浅灰", "浅蓝", "浅绿", "浅粉", "浅紫"};
+        final int[] bgColors = {
+                R.color.bg_light_gray,
+                R.color.bg_light_blue,
+                R.color.bg_light_green,
+                R.color.bg_light_pink,
+                R.color.bg_light_purple
+        };
+
+        builder.setItems(bgOptions, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                // 保存选中的背景色
+                SharedPreferences prefs = getSharedPreferences("NotePrefs", MODE_PRIVATE);
+                prefs.edit().putInt("bg_color", bgColors[which]).apply();
+                // 更新界面背景
+                updateBackground();
+            }
+        });
+        builder.show();
+    }
+    // 更新背景
+    private void updateBackground() {
+        SharedPreferences prefs = getSharedPreferences("NotePrefs", MODE_PRIVATE);
+        int bgColor = prefs.getInt("bg_color", R.color.bg_light_gray);
+
+        // 设置列表背景
+        getListView().setBackgroundColor(getResources().getColor(bgColor));
+
+        // 通知适配器刷新列表项
+        ((SimpleCursorAdapter) getListAdapter()).notifyDataSetChanged();
+    }
+
 
     /**
      * This method is called when the user context-clicks a note in the list. NotesList registers

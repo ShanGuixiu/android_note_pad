@@ -18,7 +18,8 @@
     android:id="@+id/note"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/transparent"
+    android:textColor="@color/text_black"
+    android:background="@color/bg_light_gray"
     android:padding="5dp"
     android:scrollbars="vertical"
     android:fadingEdge="vertical"
@@ -26,3 +27,4 @@
     android:textSize="22sp"
     android:capitalize="sentences"
 />
+<!--    android:background="@android:color/transparent"-->

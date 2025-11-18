@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 淡色系背景（指定5种） -->
+    <color name="bg_light_gray">#F5F5F5</color> <!-- 浅灰 -->
+    <color name="bg_light_blue">#E3F2FD</color> <!-- 浅蓝 -->
+    <color name="bg_light_green">#E8F5E9</color> <!-- 浅绿 -->
+    <color name="bg_light_pink">#FCE4EC</color> <!-- 浅粉 -->
+    <color name="bg_light_purple">#F3E5F5</color> <!-- 浅紫 -->
+    <!-- 黑色文字 -->
+    <color name="text_black">#000000</color>
+    <!-- 深灰色-用于副标题 -->
+    <color name="text_dark_gray">#333333</color>
+</resources>

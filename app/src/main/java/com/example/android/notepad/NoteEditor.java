@@ -26,6 +26,7 @@ import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.database.Cursor;
 import android.graphics.Canvas;
@@ -90,12 +91,10 @@ public class NoteEditor extends Activity {
         // This constructor is used by LayoutInflater
         public LinedEditText(Context context, AttributeSet attrs) {
             super(context, attrs);
-
-            // Creates a Rect and a Paint object, and sets the style and color of the Paint object.
             mRect = new Rect();
             mPaint = new Paint();
             mPaint.setStyle(Paint.Style.STROKE);
-            mPaint.setColor(0x800000FF);
+            mPaint.setColor(0x80000000); // 改为深灰色线条（与黑色文字协调）
         }
 
         /**
@@ -237,8 +236,20 @@ public class NoteEditor extends Activity {
         if (savedInstanceState != null) {
             mOriginalContent = savedInstanceState.getString(ORIGINAL_CONTENT);
         }
+
+        // 应用背景设置
+        applyBackgroundSetting();
     }
 
+    private void applyBackgroundSetting() {
+        SharedPreferences prefs = getSharedPreferences("NotePrefs", MODE_PRIVATE);
+        int bgColor = prefs.getInt("bg_color", color.bg_light_gray);
+
+        // 设置编辑器背景
+        mText.setBackgroundColor(getResources().getColor(bgColor));
+        // 确保文字颜色为白色
+        mText.setTextColor(getResources().getColor(color.text_black));
+    }
     /**
      * This method is called when the Activity is about to come to the foreground. This happens
      * when the Activity comes to the top of the task stack, OR when it is first starting.

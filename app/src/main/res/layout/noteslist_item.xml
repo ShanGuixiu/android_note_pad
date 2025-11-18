@@ -3,8 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:background="@color/bg_light_gray"
     android:orientation="vertical"
-    android:padding="8dp"> <!-- 外层padding形成整体间距 -->
+    android:padding="8dp">
 
     <!-- 带悬浮效果的卡片容器 -->
     <LinearLayout
@@ -16,12 +17,12 @@
         android:padding="12dp"
         tools:ignore="UselessParent">
 
-        <!-- 原标题文本控件 -->
+
         <TextView
             android:id="@android:id/text1"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@android:color/black"
-            android:textSize="16sp" /> <!-- 文本上下内边距 -->
+            android:textColor="@color/text_black"
+            android:textSize="16sp" />
     </LinearLayout>
 </LinearLayout>
