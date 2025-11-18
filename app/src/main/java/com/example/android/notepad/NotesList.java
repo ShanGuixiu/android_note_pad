@@ -22,19 +22,18 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
-import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.SimpleCursorAdapter;
+import android.widget.TextView;
 
-import com.example.android.notepad.NotePad;
-import com.example.android.notepad.R;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import java.util.TimeZone;
+
 
 /**
- * 显示笔记列表。如果传入的Intent中有提供Uri，则则显示该Uri对应的笔记内容，否则默认显示NotePadProvider中的内容。
- *
- * 注意：注意本Activity中的提供者操作是在UI线程上进行的。
- * 这不是一个好的实践。这样做只是为了使代码更易读。一个真正的应用程序应该使用
- * AsyncQueryHandler或AsyncTask对象在单独的线程上异步执行操作。
+ * 笔记列表
  */
 public class NotesList extends ListActivity {
 
@@ -44,13 +43,17 @@ public class NotesList extends ListActivity {
     /**
      * 游标适配器所需的列
      */
-    private static final String[] PROJECTION = new String[] {
-            NotePad.Notes._ID, // 0
-            NotePad.Notes.COLUMN_NAME_TITLE, // 1
+    private static final String[] PROJECTION = new String[]{
+            NotePad.Notes._ID,
+            NotePad.Notes.COLUMN_NAME_TITLE,
+            NotePad.Notes.COLUMN_NAME_MODIFICATION_DATE // 新增：查询创建时间
     };
 
-    /** 标题列的索引 */
+    /**
+     * 标题列的索引
+     */
     private static final int COLUMN_INDEX_TITLE = 1;
+    private static final int COLUMN_NAME_MODIFICATION_DATE = 2;
 
     /**
      * onCreate在Android从头开始启动此Activity时调用。
@@ -83,11 +86,6 @@ public class NotesList extends ListActivity {
          */
         getListView().setOnCreateContextMenuListener(this);
 
-
-        /* 执行托管查询。Activity会在需要时处理关闭和重新查询游标
-         *
-         * 请注意关于在UI线程上执行提供者操作的介绍性说明。
-         */
         Cursor cursor = managedQuery(
                 getIntent().getData(),            // 使用提供者的默认内容URI
                 PROJECTION,                       // 返回每个笔记的笔记ID和标题
@@ -96,18 +94,15 @@ public class NotesList extends ListActivity {
                 NotePad.Notes.DEFAULT_SORT_ORDER  // 使用默认排序顺序
         );
 
-        /*
-         * 以下两个数组创建游标中的列与ListView中项的视图ID之间的"映射"。
-         * dataColumns数组中的每个元素代表一个列名；viewID数组中的每个元素代表一个View的ID。
-         * SimpleCursorAdapter按升序映射它们，以确定每个列值将在ListView中的哪个位置显示。
-         */
 
-        // 要在视图中显示的游标列的名称，初始化为标题列
-        String[] dataColumns = { NotePad.Notes.COLUMN_NAME_TITLE } ;
-
-        // 将显示游标列的视图ID，初始化为noteslist_item.xml中的TextView
-        int[] viewIDs = { android.R.id.text1 };
-
+        String[] dataColumns = {
+                NotePad.Notes.COLUMN_NAME_TITLE,
+                NotePad.Notes.COLUMN_NAME_MODIFICATION_DATE
+        };
+        int[] viewIDs = {
+                android.R.id.text1,
+                R.id.update_time
+        };
 
         // 为ListView创建支持的适配器
         CustomCursorAdapter adapter
@@ -129,13 +124,14 @@ public class NotesList extends ListActivity {
     /**
      * 当用户第一次点击设备的菜单按钮时调用此方法
      * 对于此Activity。Android传入一个填充了项的Menu对象。
-     *
+     * <p>
      * 设置一个提供插入选项以及一系列替代操作的菜单
      * 对于此Activity。其他想要处理笔记的应用程序可以"注册"自己
      * 在Android中，通过提供包含ALTERNATIVE类别和
      * mime类型NotePad.Notes.CONTENT_TYPE。如果他们这样做，onCreateOptionsMenu()中的代码
      * 将包含意图过滤器的Activity添加到其选项列表中。实际上，
      * 菜单将为用户提供可以处理笔记的其他应用程序。
+     *
      * @param menu 要向其添加菜单项的Menu对象
      * @return 始终为True。菜单应该被显示
      */
@@ -237,9 +233,10 @@ public class NotesList extends ListActivity {
      * 当用户从菜单中选择一个选项但列表中没有选中项时调用此方法。
      * 如果选项是INSERT，则发送一个带有ACTION_INSERT动作的新Intent。
      * 传入Intent中的数据被放入新Intent中。实际上，这会触发NotePad应用程序中的NoteEditor活动。
-     *
+     * <p>
      * 如果该项不是INSERT，则很可能是来自另一个应用程序的替代选项。
      * 调用父方法来处理该项。
+     *
      * @param item 用户选择的菜单项
      * @return 如果选中的是INSERT菜单项，则为True；否则，返回调用父方法的结果
      */
@@ -272,7 +269,6 @@ public class NotesList extends ListActivity {
     }
 
 
-
     // 在showBackgroundChooser方法中调整背景选项
     private void showBackgroundChooser() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
@@ -288,15 +284,12 @@ public class NotesList extends ListActivity {
                 R.color.bg_light_purple
         };
 
-        builder.setItems(bgOptions, new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                // 保存选中的背景色
-                SharedPreferences prefs = getSharedPreferences("NotePrefs", MODE_PRIVATE);
-                prefs.edit().putInt("bg_color", bgColors[which]).apply();
-                // 更新界面背景
-                updateBackground();
-            }
+        builder.setItems(bgOptions, (dialog, which) -> {
+            // 保存选中的背景色
+            SharedPreferences prefs = getSharedPreferences("NotePrefs", MODE_PRIVATE);
+            prefs.edit().putInt("bg_color", bgColors[which]).apply();
+            // 更新界面背景
+            updateBackground();
         });
         builder.show();
     }
@@ -320,15 +313,14 @@ public class NotesList extends ListActivity {
     /**
      * 当用户在列表中长按点击笔记时调用此方法。NotesList将自己注册为
      * ListView的上下文菜单处理程序（这是在onCreate()中完成的）。
-     *
+     * <p>
      * 唯一可用的选项是复制和删除。
-     *
+     * <p>
      * 长按点击等同于上下文点击。
      *
-     * @param menu 要向其添加项的ContexMenu对象
-     * @param view 正在为其构造上下文菜单的View
+     * @param menu     要向其添加项的ContextMenu对象
+     * @param view     正在为其构造上下文菜单的View
      * @param menuInfo 与视图关联的数据
-     * @throws ClassCastException
      */
     @Override
     public void onCreateContextMenu(ContextMenu menu, View view, ContextMenu.ContextMenuInfo menuInfo) {
@@ -384,22 +376,11 @@ public class NotesList extends ListActivity {
      *
      * @param item 选中的菜单项
      * @return 如果菜单项是DELETE，且不需要默认处理，则为True；否则为False，这会触发该项的默认处理
-     * @throws ClassCastException
      */
     @Override
     public boolean onContextItemSelected(MenuItem item) {
         // 菜单项的数据
         AdapterView.AdapterContextMenuInfo info;
-
-        /*
-         * 从菜单项获取额外信息。当笔记列表中的笔记被长按点击时，
-         * 会出现一个上下文菜单。菜单的菜单项会自动获取与被长按点击的笔记相关联的数据。
-         * 数据来自支持列表的提供者。
-         *
-         * 笔记的数据以ContextMenuInfo对象的形式传递给上下文菜单创建例程。
-         *
-         * 当点击上下文菜单项之一时，相同的数据连同笔记ID通过item参数传递给onContextItemSelected()。
-         */
         try {
             // 将项中的数据对象转换为AdapterView对象的类型
             info = (AdapterView.AdapterContextMenuInfo) item.getMenuInfo();
@@ -453,13 +434,14 @@ public class NotesList extends ListActivity {
 
     /**
      * 当用户点击显示列表中的笔记时调用此方法。
-     *
+     * <p>
      * 此方法处理传入的PICK（从提供者获取数据）或GET_CONTENT（获取或创建数据）动作。
      * 如果传入的动作是EDIT，此方法发送一个新的Intent来启动NoteEditor。
-     * @param l 包含点击项的ListView
-     * @param v 单个项的View
+     *
+     * @param l        包含点击项的ListView
+     * @param v        单个项的View
      * @param position v在显示列表中的位置
-     * @param id 点击项的行ID
+     * @param id       点击项的行ID
      */
     @Override
     protected void onListItemClick(ListView l, View v, int position, long id) {
@@ -486,11 +468,20 @@ public class NotesList extends ListActivity {
     /**
      * 自定义游标适配器，用于动态设置列表项背景色
      */
+    /**
+     * 自定义游标适配器，用于动态设置列表项背景色和显示创建时间
+     */
     private class CustomCursorAdapter extends SimpleCursorAdapter {
         private int mBgColor;
+        // 时间格式化器（yyyy-MM-dd HH:mm）
+        private final SimpleDateFormat dateFormat;
 
         public CustomCursorAdapter(Context context, int layout, Cursor c, String[] from, int[] to) {
             super(context, layout, c, from, to, 0);
+            // 初始化时间格式化器并设置时区
+            dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault());
+            dateFormat.setTimeZone(TimeZone.getTimeZone("Asia/Shanghai"));
+
             // 初始化背景色
             SharedPreferences prefs = getSharedPreferences("NotePrefs", MODE_PRIVATE);
             mBgColor = prefs.getInt("bg_color", R.color.bg_light_gray);
@@ -500,22 +491,39 @@ public class NotesList extends ListActivity {
         public View getView(int position, View convertView, ViewGroup parent) {
             View view = super.getView(position, convertView, parent);
             if (view != null) {
-                // 设置列表项整体背景
+                // 设置列表项整体背景（保留原功能）
                 view.setBackgroundColor(getResources().getColor(mBgColor));
 
-//                // 设置卡片容器背景（稍微深一点的颜色作为区分）
-//                LinearLayout cardContainer = (LinearLayout) view.findViewById(R.id.card_container);
-//                if (cardContainer != null) {
-//                    cardContainer.setBackgroundColor(getDarkerColor(mBgColor));
-//                }
+                // 新增：处理创建时间显示
+                Cursor cursor = getCursor();  // 获取当前游标
+                if (cursor.moveToPosition(position)) {  // 移动游标到当前位置
+                    // 获取时间控件
+                    TextView timeTv = (TextView) view.findViewById(R.id.update_time);
+                    if (timeTv != null) {
+                        // 从游标获取创建时间（毫秒值）
+                        long createTime = cursor.getLong(COLUMN_NAME_MODIFICATION_DATE);
+//                        System.out.println("createTime = " + createTime);
+//                        System.out.println(dateFormat.format(new Date(createTime)));
+//                        System.out.println(System.currentTimeMillis());
+//                        System.out.println(dateFormat.format(System.currentTimeMillis()));
+                        // 格式化时间并设置到控件
+                        timeTv.setText(dateFormat.format(new Date(createTime)));
+                    }
+                }
+
+                // 如果需要恢复卡片容器背景，取消下面注释
+                // LinearLayout cardContainer = view.findViewById(R.id.card_container);
+                // if (cardContainer != null) {
+                //     cardContainer.setBackgroundColor(getDarkerColor(mBgColor));
+                // }
             }
             return view;
         }
 
-        // 辅助方法：将颜色调深一点作为卡片背景
+        // 辅助方法：将颜色调深一点作为卡片背景（
         private int getDarkerColor(int colorResId) {
             int color = getResources().getColor(colorResId);
-            float factor = 0.95f; // 调深10%
+            float factor = 0.95f; // 调深5%
             int a = Color.alpha(color);
             int r = Math.round(Color.red(color) * factor);
             int g = Math.round(Color.green(color) * factor);

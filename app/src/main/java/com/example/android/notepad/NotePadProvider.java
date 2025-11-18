@@ -68,12 +68,12 @@ public class NotePadProvider extends ContentProvider implements PipeDataWriter<C
     /**
      * A projection map used to select columns from the database
      */
-    private static HashMap<String, String> sNotesProjectionMap;
+    private static final HashMap<String, String> sNotesProjectionMap;
 
     /**
      * A projection map used to select columns from the database
      */
-    private static HashMap<String, String> sLiveFolderProjectionMap;
+    private static final HashMap<String, String> sLiveFolderProjectionMap;
 
     /**
      * Standard projection for the interesting columns of a normal note.
