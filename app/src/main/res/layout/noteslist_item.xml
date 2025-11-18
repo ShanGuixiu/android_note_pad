@@ -1,14 +1,15 @@
-<?xml version="1.0" encoding="utf-8"?><!-- 原布局仅包含一个TextView，新增悬浮效果容器 -->
+<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@color/bg_light_gray"
+    android:background="@android:color/transparent"
     android:orientation="vertical"
     android:padding="8dp">
 
     <!-- 带悬浮效果的卡片容器 -->
     <LinearLayout
+        android:id="@+id/card_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="4dp"
@@ -16,7 +17,6 @@
         android:elevation="4dp"
         android:padding="12dp"
         tools:ignore="UselessParent">
-
 
         <TextView
             android:id="@android:id/text1"
