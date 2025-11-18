@@ -8,8 +8,10 @@
     <color name="bg_light_purple">#F3E5F5</color> <!-- 浅紫 -->
     <color name="time_color">#999999</color> <!-- 淡灰色时间 -->
     <color name="border_gray">#999999</color> <!-- 淡灰色时间 -->
+
     <!-- 黑色文字 -->
     <color name="text_black">#000000</color>
     <!-- 深灰色-用于副标题 -->
     <color name="text_dark_gray">#333333</color>
+    <color name="divider">#F8F7F7</color>
 </resources>

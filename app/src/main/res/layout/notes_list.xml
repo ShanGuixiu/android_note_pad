@@ -10,15 +10,18 @@
         android:id="@+id/et_search"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_margin="8dp"
+        android:layout_marginLeft="12dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginRight="12dp"
+        android:layout_marginBottom="8dp"
         android:background="@drawable/search_bg"
+        android:drawableStart="@android:drawable/ic_menu_search"
         android:drawableLeft="@android:drawable/ic_menu_search"
         android:drawablePadding="8dp"
-        android:drawableStart="@android:drawable/ic_menu_search"
         android:hint="@string/search_placeholder"
         android:imeOptions="actionSearch"
         android:inputType="text"
-        android:padding="12dp"
+        android:padding="8dp"
         android:textColor="@color/text_black" />
 
     <!-- 笔记列表 - 背景设为透明以继承父布局背景 -->

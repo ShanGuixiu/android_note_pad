@@ -472,7 +472,6 @@ public class NotesList extends ListActivity {
     }
 
     // 更新背景
-// 更新背景方法修改
     private void updateBackground() {
         SharedPreferences prefs = getSharedPreferences("NotePrefs", MODE_PRIVATE);
         int bgColor = prefs.getInt("bg_color", R.color.bg_light_gray);

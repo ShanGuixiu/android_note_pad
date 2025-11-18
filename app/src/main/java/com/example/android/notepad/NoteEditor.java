@@ -1,238 +1,169 @@
-/*
- * Copyright (C) 2007 The Android Open Source Project
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.example.android.notepad;
 
-import static com.example.android.notepad.R.*;
-
+import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.ContentValues;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.ComponentName;
 import android.content.ContentResolver;
-import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.res.Resources;
 import android.database.Cursor;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Bundle;
-import android.util.AttributeSet;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.view.View;
 import android.widget.EditText;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import java.util.TimeZone;
 
 /**
- * This Activity handles "editing" a note, where editing is responding to
- * {@link Intent#ACTION_VIEW} (request to view data), edit a note
- * {@link Intent#ACTION_EDIT}, create a note {@link Intent#ACTION_INSERT}, or
- * create a new note from the current contents of the clipboard {@link Intent#ACTION_PASTE}.
- *
- * NOTE: Notice that the provider operations in this Activity are taking place on the UI thread.
- * This is not a good practice. It is only done here to make the code more readable. A real
- * application should use the {@link android.content.AsyncQueryHandler}
- * or {@link android.os.AsyncTask} object to perform operations asynchronously on a separate thread.
+ * 笔记编辑页面
+ * 支持创建、编辑、保存、删除笔记，包含标题、内容及时间记录功能
  */
 public class NoteEditor extends Activity {
-    // For logging and debugging purposes
+    // 日志标签
     private static final String TAG = "NoteEditor";
-
-    /*
-     * Creates a projection that returns the note ID and the note contents.
-     */
-    private static final String[] PROJECTION =
-        new String[] {
-            NotePad.Notes._ID,
-            NotePad.Notes.COLUMN_NAME_TITLE,
-            NotePad.Notes.COLUMN_NAME_NOTE
-    };
-
-    // A label for the saved state of the activity
+    // 保存状态的键
     private static final String ORIGINAL_CONTENT = "origContent";
-
-    // This Activity can be started by more than one action. Each action is represented
-    // as a "state" constant
+    // 状态常量：编辑现有笔记
     private static final int STATE_EDIT = 0;
+    // 状态常量：新建笔记
     private static final int STATE_INSERT = 1;
 
-    // Global mutable variables
+    // 全局变量
     private int mState;
     private Uri mUri;
     private Cursor mCursor;
-    private EditText mText;
-    private String mOriginalContent;
+    private EditText mTitleText; // 标题输入框
+    private LinedEditText mContentText; // 带线条的内容编辑框
+    private TextView mCreateTimeTv; // 创建时间显示
+    private TextView mModifyTimeTv; // 修改时间显示
+    private String mOriginalContent; // 原始内容（用于撤销）
+    private SimpleDateFormat mDateFormat; // 时间格式化器
 
     /**
-     * Defines a custom EditText View that draws lines between each line of text that is displayed.
+     * 带线条的自定义编辑框
+     * 在每行文字下方绘制横线，模拟笔记本效果
      */
     public static class LinedEditText extends EditText {
         private final Rect mRect;
         private final Paint mPaint;
 
-        // This constructor is used by LayoutInflater
-        public LinedEditText(Context context, AttributeSet attrs) {
+        // 布局加载器使用的构造方法
+        public LinedEditText(Context context, android.util.AttributeSet attrs) {
             super(context, attrs);
             mRect = new Rect();
             mPaint = new Paint();
             mPaint.setStyle(Paint.Style.STROKE);
-            mPaint.setColor(0x80000000); // 改为深灰色线条（与黑色文字协调）
+            mPaint.setColor(0x80000000); // 深灰色线条
         }
 
         /**
-         * This is called to draw the LinedEditText object
-         * @param canvas The canvas on which the background is drawn.
+         * 绘制编辑框内容及线条
+         *
+         * @param canvas 绘图画布
          */
         @Override
         protected void onDraw(Canvas canvas) {
-
-            // Gets the number of lines of text in the View.
+            // 获取文字行数
             int count = getLineCount();
-
-            // Gets the global Rect and Paint objects
             Rect r = mRect;
             Paint paint = mPaint;
 
-            /*
-             * Draws one line in the rectangle for every line of text in the EditText
-             */
+            // 为每行文字绘制下划线
             for (int i = 0; i < count; i++) {
-
-                // Gets the baseline coordinates for the current line of text
+                // 获取当前行的基线位置
                 int baseline = getLineBounds(i, r);
-
-                /*
-                 * Draws a line in the background from the left of the rectangle to the right,
-                 * at a vertical position one dip below the baseline, using the "paint" object
-                 * for details.
-                 */
+                // 绘制横线（位于基线下方1dp处）
                 canvas.drawLine(r.left, baseline + 1, r.right, baseline + 1, paint);
             }
 
-            // Finishes up by calling the parent method
+            // 调用父类方法完成其余绘制
             super.onDraw(canvas);
         }
     }
 
     /**
-     * This method is called by Android when the Activity is first started. From the incoming
-     * Intent, it determines what kind of editing is desired, and then does it.
+     * 初始化Activity
+     * 根据意图判断是新建还是编辑笔记，初始化数据和视图
      */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        setContentView(R.layout.note_editor);
 
-        /*
-         * Creates an Intent to use when the Activity object's result is sent back to the
-         * caller.
-         */
+        // 初始化时间格式化器（北京时间，格式：年-月-日 时:分）
+        mDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault());
+        mDateFormat.setTimeZone(TimeZone.getTimeZone("Asia/Shanghai"));
+
+        // 绑定视图控件
+        mTitleText = (EditText) findViewById(R.id.note_title);
+        mContentText = (LinedEditText) findViewById(R.id.note);
+        mCreateTimeTv = (TextView) findViewById(R.id.create_time);
+        mModifyTimeTv = (TextView) findViewById(R.id.modify_time);
+
+        // 获取启动意图
         final Intent intent = getIntent();
-
-        /*
-         *  Sets up for the edit, based on the action specified for the incoming Intent.
-         */
-
-        // Gets the action that triggered the intent filter for this Activity
         final String action = intent.getAction();
 
-        // For an edit action:
+        // 判断操作类型：编辑、新建或粘贴
         if (Intent.ACTION_EDIT.equals(action)) {
-
-            // Sets the Activity state to EDIT, and gets the URI for the data to be edited.
             mState = STATE_EDIT;
             mUri = intent.getData();
-
-            // For an insert or paste action:
-        } else if (Intent.ACTION_INSERT.equals(action)
-                || Intent.ACTION_PASTE.equals(action)) {
-
-            // Sets the Activity state to INSERT, gets the general note URI, and inserts an
-            // empty record in the provider
+        } else if (Intent.ACTION_INSERT.equals(action) || Intent.ACTION_PASTE.equals(action)) {
             mState = STATE_INSERT;
+            // 插入新笔记
             mUri = getContentResolver().insert(intent.getData(), null);
-
-            /*
-             * If the attempt to insert the new note fails, shuts down this Activity. The
-             * originating Activity receives back RESULT_CANCELED if it requested a result.
-             * Logs that the insert failed.
-             */
             if (mUri == null) {
-
-                // Writes the log identifier, a message, and the URI that failed.
-                Log.e(TAG, "Failed to insert new note into " + getIntent().getData());
-
-                // Closes the activity.
+                Log.e(TAG, "插入新笔记失败：" + intent.getData());
                 finish();
                 return;
             }
-
-            // Since the new entry was created, this sets the result to be returned
-            // set the result to be returned.
-            setResult(RESULT_OK, (new Intent()).setAction(mUri.toString()));
-
-        // If the action was other than EDIT or INSERT:
+            setResult(RESULT_OK, new Intent().setAction(mUri.toString()));
         } else {
-
-            // Logs an error that the action was not understood, finishes the Activity, and
-            // returns RESULT_CANCELED to an originating Activity.
-            Log.e(TAG, "Unknown action, exiting");
+            Log.e(TAG, "未知操作，退出");
             finish();
             return;
         }
 
-        /*
-         * Using the URI passed in with the triggering Intent, gets the note or notes in
-         * the provider.
-         * Note: This is being done on the UI thread. It will block the thread until the query
-         * completes. In a sample app, going against a simple provider based on a local database,
-         * the block will be momentary, but in a real app you should use
-         * android.content.AsyncQueryHandler or android.os.AsyncTask.
-         */
+        // 查询笔记数据（包含ID、标题、内容、创建时间、修改时间）
         mCursor = managedQuery(
-            mUri,         // The URI that gets multiple notes from the provider.
-            PROJECTION,   // A projection that returns the note ID and note content for each note.
-            null,         // No "where" clause selection criteria.
-            null,         // No "where" clause selection values.
-            null          // Use the default sort order (modification date, descending)
+                mUri,
+                new String[]{
+                        NotePad.Notes._ID,
+                        NotePad.Notes.COLUMN_NAME_TITLE,
+                        NotePad.Notes.COLUMN_NAME_NOTE,
+                        NotePad.Notes.COLUMN_NAME_CREATE_DATE,
+                        NotePad.Notes.COLUMN_NAME_MODIFICATION_DATE
+                },
+                null,
+                null,
+                null
         );
 
-        // For a paste, initializes the data from clipboard.
-        // (Must be done after mCursor is initialized.)
+        // 处理粘贴操作
         if (Intent.ACTION_PASTE.equals(action)) {
-            // Does the paste
             performPaste();
-            // Switches the state to EDIT so the title can be modified.
             mState = STATE_EDIT;
         }
 
-        // Sets the layout for this Activity. See res/layout/note_editor.xml
-        setContentView(R.layout.note_editor);
-
-        // Gets a handle to the EditText in the the layout.
-        mText = (EditText) findViewById(R.id.note);
-
-        /*
-         * If this Activity had stopped previously, its state was written the ORIGINAL_CONTENT
-         * location in the saved Instance state. This gets the state.
-         */
+        // 恢复保存的状态
         if (savedInstanceState != null) {
             mOriginalContent = savedInstanceState.getString(ORIGINAL_CONTENT);
         }
@@ -241,317 +172,213 @@ public class NoteEditor extends Activity {
         applyBackgroundSetting();
     }
 
+    /**
+     * 应用背景颜色设置
+     */
     private void applyBackgroundSetting() {
         SharedPreferences prefs = getSharedPreferences("NotePrefs", MODE_PRIVATE);
-        int bgColor = prefs.getInt("bg_color", color.bg_light_gray);
+        // 1. 获取列表页保存的颜色资源ID（默认值与列表页保持一致）
+        int bgColorRes = prefs.getInt("bg_color", R.color.bg_light_gray);
+        // 2. 转换为实际颜色值
+        int bgColor = getResources().getColor(bgColorRes);
 
-        // 设置编辑器背景
-        mText.setBackgroundColor(getResources().getColor(bgColor));
-        // 确保文字颜色为白色
-        mText.setTextColor(getResources().getColor(color.text_black));
+        // 3. 设置根布局背景（外围区域颜色，与列表页保持一致）
+        View rootView = findViewById(android.R.id.content);
+        rootView.setBackgroundColor(bgColor);
+
+        // 4. 内容编辑区文字颜色调浅（解决颜色太深问题）
+        mContentText.setTextColor(getResources().getColor(R.color.text_dark_gray));
+        mTitleText.setTextColor(getResources().getColor(R.color.text_black));
     }
+
     /**
-     * This method is called when the Activity is about to come to the foreground. This happens
-     * when the Activity comes to the top of the task stack, OR when it is first starting.
-     *
-     * Moves to the first note in the list, sets an appropriate title for the action chosen by
-     * the user, puts the note contents into the TextView, and saves the original text as a
-     * backup.
+     * 恢复数据并显示
+     * 在Activity进入前台时调用，加载笔记内容和时间信息
      */
+    @SuppressLint("SetTextI18n")
     @Override
     protected void onResume() {
         super.onResume();
 
-        /*
-         * mCursor is initialized, since onCreate() always precedes onResume for any running
-         * process. This tests that it's not null, since it should always contain data.
-         */
         if (mCursor != null) {
-            // Requery in case something changed while paused (such as the title)
             mCursor.requery();
-
-            /* Moves to the first record. Always call moveToFirst() before accessing data in
-             * a Cursor for the first time. The semantics of using a Cursor are that when it is
-             * created, its internal index is pointing to a "place" immediately before the first
-             * record.
-             */
             mCursor.moveToFirst();
 
-            // Modifies the window title for the Activity according to the current Activity state.
+            // 设置标题栏
             if (mState == STATE_EDIT) {
-                // Set the title of the Activity to include the note title
-                int colTitleIndex = mCursor.getColumnIndex(NotePad.Notes.COLUMN_NAME_TITLE);
-                String title = mCursor.getString(colTitleIndex);
-                Resources res = getResources();
-                String text = String.format(res.getString(R.string.title_edit), title);
-                setTitle(text);
-            // Sets the title to "create" for inserts
-            } else if (mState == STATE_INSERT) {
-                setTitle(getText(R.string.title_create));
+                String title = mCursor.getString(1); // COLUMN_NAME_TITLE的索引为1
+                setTitle(String.format(getString(R.string.title_edit), title));
+            } else {
+                setTitle(getString(R.string.title_create));
             }
 
-            /*
-             * onResume() may have been called after the Activity lost focus (was paused).
-             * The user was either editing or creating a note when the Activity paused.
-             * The Activity should re-display the text that had been retrieved previously, but
-             * it should not move the cursor. This helps the user to continue editing or entering.
-             */
-
-            // Gets the note text from the Cursor and puts it in the TextView, but doesn't change
-            // the text cursor's position.
-            int colNoteIndex = mCursor.getColumnIndex(NotePad.Notes.COLUMN_NAME_NOTE);
-            String note = mCursor.getString(colNoteIndex);
-            mText.setTextKeepState(note);
-
-            // Stores the original note text, to allow the user to revert changes.
+            // 加载标题和内容
+            mTitleText.setText(mCursor.getString(1));
+            String content = mCursor.getString(2); // COLUMN_NAME_NOTE的索引为2
+            mContentText.setTextKeepState(content);
             if (mOriginalContent == null) {
-                mOriginalContent = note;
+                mOriginalContent = content;
             }
 
-        /*
-         * Something is wrong. The Cursor should always contain data. Report an error in the
-         * note.
-         */
+            // 加载并显示时间
+            long createTime = mCursor.getLong(3); // COLUMN_NAME_CREATE_DATE的索引为3
+            long modifyTime = mCursor.getLong(4); // COLUMN_NAME_MODIFICATION_DATE的索引为4
+            mCreateTimeTv.setText("创建时间：" + mDateFormat.format(new Date(createTime)));
+            mModifyTimeTv.setText("修改时间：" + mDateFormat.format(new Date(modifyTime)));
         } else {
-            setTitle(getText(R.string.error_title));
-            mText.setText(getText(R.string.error_message));
+            setTitle(getString(R.string.error_title));
+            mContentText.setText(getString(R.string.error_message));
         }
     }
 
     /**
-     * This method is called when an Activity loses focus during its normal operation, and is then
-     * later on killed. The Activity has a chance to save its state so that the system can restore
-     * it.
-     *
-     * Notice that this method isn't a normal part of the Activity lifecycle. It won't be called
-     * if the user simply navigates away from the Activity.
+     * 保存当前状态
+     * 在Activity可能被销毁时调用，保存原始内容
      */
     @Override
     protected void onSaveInstanceState(Bundle outState) {
-        // Save away the original text, so we still have it if the activity
-        // needs to be killed while paused.
+        super.onSaveInstanceState(outState);
         outState.putString(ORIGINAL_CONTENT, mOriginalContent);
     }
 
     /**
-     * This method is called when the Activity loses focus.
-     *
-     * For Activity objects that edit information, onPause() may be the one place where changes are
-     * saved. The Android application model is predicated on the idea that "save" and "exit" aren't
-     * required actions. When users navigate away from an Activity, they shouldn't have to go back
-     * to it to complete their work. The act of going away should save everything and leave the
-     * Activity in a state where Android can destroy it if necessary.
-     *
-     * If the user hasn't done anything, then this deletes or clears out the note, otherwise it
-     * writes the user's work to the provider.
+     * 暂停时保存数据
+     * 在Activity失去焦点时调用，自动保存笔记内容
      */
     @Override
     protected void onPause() {
         super.onPause();
 
-        /*
-         * Tests to see that the query operation didn't fail (see onCreate()). The Cursor object
-         * will exist, even if no records were returned, unless the query failed because of some
-         * exception or error.
-         *
-         */
         if (mCursor != null) {
+            String title = mTitleText.getText().toString().trim();
+            String content = mContentText.getText().toString();
 
-            // Get the current note text.
-            String text = mText.getText().toString();
-            int length = text.length();
-
-            /*
-             * If the Activity is in the midst of finishing and there is no text in the current
-             * note, returns a result of CANCELED to the caller, and deletes the note. This is done
-             * even if the note was being edited, the assumption being that the user wanted to
-             * "clear out" (delete) the note.
-             */
-            if (isFinishing() && (length == 0)) {
+            // 内容为空且是新建笔记则删除
+            if (isFinishing() && TextUtils.isEmpty(content) && mState == STATE_INSERT) {
                 setResult(RESULT_CANCELED);
                 deleteNote();
-
-                /*
-                 * Writes the edits to the provider. The note has been edited if an existing note was
-                 * retrieved into the editor *or* if a new note was inserted. In the latter case,
-                 * onCreate() inserted a new empty note into the provider, and it is this new note
-                 * that is being edited.
-                 */
             } else if (mState == STATE_EDIT) {
-                // Creates a map to contain the new values for the columns
-                updateNote(text, null);
+                updateNote(content, title);
             } else if (mState == STATE_INSERT) {
-                updateNote(text, text);
+                updateNote(content, title);
                 mState = STATE_EDIT;
-          }
+            }
         }
     }
 
     /**
-     * This method is called when the user clicks the device's Menu button the first time for
-     * this Activity. Android passes in a Menu object that is populated with items.
-     *
-     * Builds the menus for editing and inserting, and adds in alternative actions that
-     * registered themselves to handle the MIME types for this application.
-     *
-     * @param menu A Menu object to which items should be added.
-     * @return True to display the menu.
+     * 创建菜单
+     * 加载菜单资源并添加额外操作项
      */
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate menu from XML resource
         MenuInflater inflater = getMenuInflater();
         inflater.inflate(R.menu.editor_options_menu, menu);
 
-        // Only add extra menu items for a saved note 
+        // 仅为已保存的笔记添加额外菜单
         if (mState == STATE_EDIT) {
-            // Append to the
-            // menu items for any other activities that can do stuff with it
-            // as well.  This does a query on the system for any activities that
-            // implement the ALTERNATIVE_ACTION for our data, adding a menu item
-            // for each one that is found.
             Intent intent = new Intent(null, mUri);
             intent.addCategory(Intent.CATEGORY_ALTERNATIVE);
-            menu.addIntentOptions(Menu.CATEGORY_ALTERNATIVE, 0, 0,
-                    new ComponentName(this, NoteEditor.class), null, intent, 0, null);
+            menu.addIntentOptions(
+                    Menu.CATEGORY_ALTERNATIVE, 0, 0,
+                    new ComponentName(this, NoteEditor.class), null, intent, 0, null
+            );
         }
-
         return super.onCreateOptionsMenu(menu);
     }
 
+    /**
+     * 准备菜单
+     * 根据笔记是否修改决定是否显示撤销选项
+     */
     @Override
     public boolean onPrepareOptionsMenu(Menu menu) {
-        // Check if note has changed and enable/disable the revert option
-        int colNoteIndex = mCursor.getColumnIndex(NotePad.Notes.COLUMN_NAME_NOTE);
-        String savedNote = mCursor.getString(colNoteIndex);
-        String currentNote = mText.getText().toString();
-        if (savedNote.equals(currentNote)) {
-            menu.findItem(R.id.menu_revert).setVisible(false);
-        } else {
-            menu.findItem(R.id.menu_revert).setVisible(true);
+        if (mCursor != null) {
+            String savedContent = mCursor.getString(2);
+            String currentContent = mContentText.getText().toString();
+            menu.findItem(R.id.menu_revert).setVisible(!savedContent.equals(currentContent));
         }
         return super.onPrepareOptionsMenu(menu);
     }
 
     /**
-     * This method is called when a menu item is selected. Android passes in the selected item.
-     * The switch statement in this method calls the appropriate method to perform the action the
-     * user chose.
-     *
-     * @param item The selected MenuItem
-     * @return True to indicate that the item was processed, and no further work is necessary. False
-     * to proceed to further processing as indicated in the MenuItem object.
+     * 处理菜单点击
+     * 响应保存、删除、撤销等操作
      */
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle all of the possible menu actions.
         int id = item.getItemId();
-        if(id== R.id.menu_save) {
-            String text = mText.getText().toString();
-            updateNote(text, null);
+        if (id == R.id.menu_save) {
+            updateNote(mContentText.getText().toString(), mTitleText.getText().toString().trim());
             finish();
+            return true;
         } else if (id == R.id.menu_delete) {
             deleteNote();
             finish();
+            return true;
         } else if (id == R.id.menu_revert) {
             cancelNote();
+            return true;
         }
         return super.onOptionsItemSelected(item);
     }
 
-//BEGIN_INCLUDE(paste)
     /**
-     * A helper method that replaces the note's data with the contents of the clipboard.
+     * 执行粘贴操作
+     * 从剪贴板获取内容并应用到当前笔记
      */
-    private final void performPaste() {
-
-        // Gets a handle to the Clipboard Manager
-        ClipboardManager clipboard = (ClipboardManager)
-                getSystemService(Context.CLIPBOARD_SERVICE);
-
-        // Gets a content resolver instance
-        ContentResolver cr = getContentResolver();
-
-        // Gets the clipboard data from the clipboard
+    private void performPaste() {
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         ClipData clip = clipboard.getPrimaryClip();
         if (clip != null) {
-
-            String text=null;
-            String title=null;
-
-            // Gets the first item from the clipboard data
             ClipData.Item item = clip.getItemAt(0);
-
-            // Tries to get the item's contents as a URI pointing to a note
             Uri uri = item.getUri();
+            String text = null;
+            String title = null;
 
-            // Tests to see that the item actually is an URI, and that the URI
-            // is a content URI pointing to a provider whose MIME type is the same
-            // as the MIME type supported by the Note pad provider.
-            if (uri != null && NotePad.Notes.CONTENT_ITEM_TYPE.equals(cr.getType(uri))) {
-
-                // The clipboard holds a reference to data with a note MIME type. This copies it.
-                Cursor orig = cr.query(
-                        uri,            // URI for the content provider
-                        PROJECTION,     // Get the columns referred to in the projection
-                        null,           // No selection variables
-                        null,           // No selection variables, so no criteria are needed
-                        null            // Use the default sort order
-                );
-
-                // If the Cursor is not null, and it contains at least one record
-                // (moveToFirst() returns true), then this gets the note data from it.
-                if (orig != null) {
-                    if (orig.moveToFirst()) {
-                        int colNoteIndex = mCursor.getColumnIndex(NotePad.Notes.COLUMN_NAME_NOTE);
-                        int colTitleIndex = mCursor.getColumnIndex(NotePad.Notes.COLUMN_NAME_TITLE);
-                        text = orig.getString(colNoteIndex);
-                        title = orig.getString(colTitleIndex);
+            // 处理剪贴板中的笔记数据
+            if (uri != null) {
+                ContentResolver cr = getContentResolver();
+                if (NotePad.Notes.CONTENT_ITEM_TYPE.equals(cr.getType(uri))) {
+                    Cursor orig = cr.query(uri, new String[]{
+                            NotePad.Notes.COLUMN_NAME_TITLE,
+                            NotePad.Notes.COLUMN_NAME_NOTE
+                    }, null, null, null);
+                    if (orig != null && orig.moveToFirst()) {
+                        title = orig.getString(0);
+                        text = orig.getString(1);
+                        orig.close();
                     }
-
-                    // Closes the cursor.
-                    orig.close();
                 }
             }
 
-            // If the contents of the clipboard wasn't a reference to a note, then
-            // this converts whatever it is to text.
+            // 处理文本数据
             if (text == null) {
                 text = item.coerceToText(this).toString();
             }
 
-            // Updates the current note with the retrieved title and text.
             updateNote(text, title);
         }
     }
-//END_INCLUDE(paste)
 
     /**
-     * Replaces the current note contents with the text and title provided as arguments.
-     * @param text The new note contents to use.
-     * @param title The new note title to use
+     * 更新笔记内容
+     *
+     * @param content 笔记内容
+     * @param title   笔记标题（可为null）
      */
-    private final void updateNote(String text, String title) {
-
-        // Sets up a map to contain values to be updated in the provider.
+    @SuppressLint("SetTextI18n")
+    private void updateNote(String content, String title) {
         ContentValues values = new ContentValues();
-        values.put(NotePad.Notes.COLUMN_NAME_MODIFICATION_DATE, System.currentTimeMillis());
+        long currentTime = System.currentTimeMillis();
+        values.put(NotePad.Notes.COLUMN_NAME_MODIFICATION_DATE, currentTime);
 
-        // If the action is to insert a new note, this creates an initial title for it.
+        // 处理标题
         if (mState == STATE_INSERT) {
-
-            // If no title was provided as an argument, create one from the note text.
-            if (title == null) {
-  
-                // Get the note's length
-                int length = text.length();
-
-                // Sets the title by getting a substring of the text that is 31 characters long
-                // or the number of characters in the note plus one, whichever is smaller.
-                title = text.substring(0, Math.min(30, length));
-  
-                // If the resulting length is more than 30 characters, chops off any
-                // trailing spaces
+            // 新建笔记时自动生成标题
+            if (TextUtils.isEmpty(title)) {
+                int length = content.length();
+                title = content.substring(0, Math.min(30, length));
                 if (length > 30) {
                     int lastSpace = title.lastIndexOf(' ');
                     if (lastSpace > 0) {
@@ -559,68 +386,61 @@ public class NoteEditor extends Activity {
                     }
                 }
             }
-            // In the values map, sets the value of the title
-            values.put(NotePad.Notes.COLUMN_NAME_TITLE, title);
-        } else if (title != null) {
-            // In the values map, sets the value of the title
+            values.put(NotePad.Notes.COLUMN_NAME_CREATE_DATE, currentTime);
+        }
+        if (!TextUtils.isEmpty(title)) {
             values.put(NotePad.Notes.COLUMN_NAME_TITLE, title);
         }
 
-        // This puts the desired notes text into the map.
-        values.put(NotePad.Notes.COLUMN_NAME_NOTE, text);
+        // 更新内容
+        values.put(NotePad.Notes.COLUMN_NAME_NOTE, content);
 
-        /*
-         * Updates the provider with the new values in the map. The ListView is updated
-         * automatically. The provider sets this up by setting the notification URI for
-         * query Cursor objects to the incoming URI. The content resolver is thus
-         * automatically notified when the Cursor for the URI changes, and the UI is
-         * updated.
-         * Note: This is being done on the UI thread. It will block the thread until the
-         * update completes. In a sample app, going against a simple provider based on a
-         * local database, the block will be momentary, but in a real app you should use
-         * android.content.AsyncQueryHandler or android.os.AsyncTask.
-         */
-        getContentResolver().update(
-                mUri,    // The URI for the record to update.
-                values,  // The map of column names and new values to apply to them.
-                null,    // No selection criteria are used, so no where columns are necessary.
-                null     // No where columns are used, so no where arguments are necessary.
-            );
+        // 提交更新
+        getContentResolver().update(mUri, values, null, null);
 
-
+        // 更新界面时间显示
+        mModifyTimeTv.setText("修改时间：" + mDateFormat.format(new Date(currentTime)));
     }
 
     /**
-     * This helper method cancels the work done on a note.  It deletes the note if it was
-     * newly created, or reverts to the original text of the note i
+     * 撤销操作
+     * 恢复笔记到原始状态或删除新建笔记
      */
-    private final void cancelNote() {
+    private void cancelNote() {
         if (mCursor != null) {
             if (mState == STATE_EDIT) {
-                // Put the original note text back into the database
                 mCursor.close();
-                mCursor = null;
                 ContentValues values = new ContentValues();
                 values.put(NotePad.Notes.COLUMN_NAME_NOTE, mOriginalContent);
+                values.put(NotePad.Notes.COLUMN_NAME_TITLE, mCursor.getString(1));
                 getContentResolver().update(mUri, values, null, null);
+                mContentText.setText(mOriginalContent);
+                mTitleText.setText(mCursor.getString(1));
             } else if (mState == STATE_INSERT) {
-                // We inserted an empty note, make sure to delete it
                 deleteNote();
+                finish();
             }
         }
-        setResult(RESULT_CANCELED);
-        finish();
     }
 
     /**
-     * Take care of deleting a note.  Simply deletes the entry.
+     * 删除笔记
+     * 从数据库中移除当前笔记
      */
-    private final void deleteNote() {
+    private void deleteNote() {
         if (mCursor != null) {
             mCursor.close();
             mCursor = null;
             getContentResolver().delete(mUri, null, null);
-            mText.setText("");
+            mContentText.setText("");
+            mTitleText.setText("");
         }
+    }
+
+    /**
+     * 取消按钮点击事件
+     */
+    public void onClickCancel(View v) {
+        cancelNote();
     }
 }
