@@ -10,10 +10,12 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.database.ContentObserver;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
@@ -67,6 +69,8 @@ public class NotesList extends ListActivity {
     private EditText mSearchEditText;
     private String mCurrentSearchQuery = "";
     private Cursor mOriginalCursor; // 保存原始游标用于恢复
+
+    private ContentObserver contentObserver;
 
     /**
      * onCreate在Android从头开始启动此Activity时调用。
@@ -123,16 +127,36 @@ public class NotesList extends ListActivity {
 
         // 初始化背景
         updateBackground();
+        contentObserver = new ContentObserver(new Handler()) {
+            @Override
+            public void onChange(boolean selfChange) {
+                super.onChange(selfChange);
+                performSearch();
+            }
+        };
+        // 注册内容观察者以监听数据库变化
+        getContentResolver().registerContentObserver(
+                NotePad.Notes.CONTENT_URI,
+                true,
+                contentObserver
+        );
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        // 取消注册内容观察者
+        getContentResolver().unregisterContentObserver(contentObserver);
     }
 
     // 新增：初始化搜索框
     private void initSearchView() {
         mSearchEditText = (EditText) findViewById(R.id.et_search);
-
         // 文本变化监听器 - 实时搜索
         mSearchEditText.addTextChangedListener(new TextWatcher() {
             @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
 
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
@@ -141,7 +165,8 @@ public class NotesList extends ListActivity {
             }
 
             @Override
-            public void afterTextChanged(Editable s) {}
+            public void afterTextChanged(Editable s) {
+            }
         });
 
         // 软键盘搜索按钮监听
@@ -149,14 +174,16 @@ public class NotesList extends ListActivity {
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
                 // 隐藏软键盘
                 InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-                imm.hideSoftInputFromWindow(mSearchEditText.getWindowToken(), 0);
+                if (imm != null) {
+                    imm.hideSoftInputFromWindow(mSearchEditText.getWindowToken(), 0);
+                }
                 return true;
             }
             return false;
         });
     }
 
-    // 新增：执行搜索逻辑
+    // 执行搜索逻辑
     private void performSearch() {
         Cursor filteredCursor;
 
@@ -190,7 +217,12 @@ public class NotesList extends ListActivity {
 
         // 更新适配器数据
         CustomCursorAdapter adapter = (CustomCursorAdapter) getListAdapter();
+        // 关闭旧游标后再设置新游标
+        Cursor oldCursor = adapter.getCursor();
         adapter.changeCursor(filteredCursor);
+        if (oldCursor != null && !oldCursor.isClosed()) {
+            oldCursor.close();
+        }
     }
 
 
@@ -212,7 +244,6 @@ public class NotesList extends ListActivity {
             mSearchEditText.setText(mCurrentSearchQuery);
         }
     }
-
 
 
     /**
