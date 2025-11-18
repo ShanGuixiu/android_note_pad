@@ -14,6 +14,9 @@ import android.database.Cursor;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextUtils;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.view.ContextMenu;
 import android.view.Menu;
@@ -21,7 +24,10 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.AdapterView;
+import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.SimpleCursorAdapter;
 import android.widget.TextView;
@@ -46,7 +52,8 @@ public class NotesList extends ListActivity {
     private static final String[] PROJECTION = new String[]{
             NotePad.Notes._ID,
             NotePad.Notes.COLUMN_NAME_TITLE,
-            NotePad.Notes.COLUMN_NAME_MODIFICATION_DATE // 新增：查询创建时间
+            NotePad.Notes.COLUMN_NAME_MODIFICATION_DATE,
+            NotePad.Notes.COLUMN_NAME_NOTE
     };
 
     /**
@@ -54,6 +61,12 @@ public class NotesList extends ListActivity {
      */
     private static final int COLUMN_INDEX_TITLE = 1;
     private static final int COLUMN_NAME_MODIFICATION_DATE = 2;
+    private static final int COLUMN_INDEX_NOTE = 3;
+
+    // 原有变量保持不变，新增搜索相关变量
+    private EditText mSearchEditText;
+    private String mCurrentSearchQuery = "";
+    private Cursor mOriginalCursor; // 保存原始游标用于恢复
 
     /**
      * onCreate在Android从头开始启动此Activity时调用。
@@ -62,39 +75,31 @@ public class NotesList extends ListActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // 去除默认分割线
+        // 设置自定义布局
+        setContentView(R.layout.notes_list);
+
+        // 原有代码保持不变...
         getListView().setDivider(null);
         getListView().setDividerHeight(0);
-        // 用户无需长按按键即可使用菜单快捷键
         setDefaultKeyMode(DEFAULT_KEYS_SHORTCUT);
 
-        /* 如果启动此Activity的Intent中没有提供数据，则此Activity
-         * 是在意图过滤器匹配到MAIN动作时启动的。我们应该使用默认的
-         * 提供者URI。
-         */
-        // 获取启动此Activity的意图
         Intent intent = getIntent();
-
-        // 如果Intent中没有关联数据，则将数据设置为默认URI，该URI用于访问笔记列表
         if (intent.getData() == null) {
             intent.setData(NotePad.Notes.CONTENT_URI);
         }
 
-        /*
-         * 为ListView设置上下文菜单激活的回调。监听器设置为当前Activity。
-         * 这样ListView中的项就启用了上下文菜单，并且上下文菜单由NotesList中的方法处理。
-         */
         getListView().setOnCreateContextMenuListener(this);
 
-        Cursor cursor = managedQuery(
-                getIntent().getData(),            // 使用提供者的默认内容URI
-                PROJECTION,                       // 返回每个笔记的笔记ID和标题
-                null,                             // 没有where子句，返回所有记录
-                null,                             // 没有where子句，因此没有where列值
-                NotePad.Notes.DEFAULT_SORT_ORDER  // 使用默认排序顺序
+        // 获取原始游标并保存
+        mOriginalCursor = managedQuery(
+                getIntent().getData(),
+                PROJECTION,
+                null,
+                null,
+                NotePad.Notes.DEFAULT_SORT_ORDER
         );
 
-
+        // 初始化适配器（使用原始游标）
         String[] dataColumns = {
                 NotePad.Notes.COLUMN_NAME_TITLE,
                 NotePad.Notes.COLUMN_NAME_MODIFICATION_DATE
@@ -104,22 +109,111 @@ public class NotesList extends ListActivity {
                 R.id.update_time
         };
 
-        // 为ListView创建支持的适配器
-        CustomCursorAdapter adapter
-                = new CustomCursorAdapter(
-                this,                             // ListView的上下文
-                R.layout.noteslist_item,          // 指向列表项的XML
-                cursor,                           // 从中获取项的游标
+        CustomCursorAdapter adapter = new CustomCursorAdapter(
+                this,
+                R.layout.noteslist_item,
+                mOriginalCursor,
                 dataColumns,
                 viewIDs
         );
-
-        // 将ListView的适配器设置为刚刚创建的游标适配器
         setListAdapter(adapter);
+
+        // 初始化搜索框
+        initSearchView();
 
         // 初始化背景
         updateBackground();
     }
+
+    // 新增：初始化搜索框
+    private void initSearchView() {
+        mSearchEditText = (EditText) findViewById(R.id.et_search);
+
+        // 文本变化监听器 - 实时搜索
+        mSearchEditText.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                mCurrentSearchQuery = s.toString().trim();
+                performSearch();
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {}
+        });
+
+        // 软键盘搜索按钮监听
+        mSearchEditText.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                // 隐藏软键盘
+                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                imm.hideSoftInputFromWindow(mSearchEditText.getWindowToken(), 0);
+                return true;
+            }
+            return false;
+        });
+    }
+
+    // 新增：执行搜索逻辑
+    private void performSearch() {
+        Cursor filteredCursor;
+
+        if (TextUtils.isEmpty(mCurrentSearchQuery)) {
+            // 始终创建新的游标而不是复用 mOriginalCursor
+            filteredCursor = managedQuery(
+                    getIntent().getData(),
+                    PROJECTION,
+                    null,
+                    null,
+                    NotePad.Notes.DEFAULT_SORT_ORDER
+            );
+        } else {
+            // 构建搜索条件：标题或内容包含搜索关键词
+            String selection = NotePad.Notes.COLUMN_NAME_TITLE + " LIKE ? OR "
+                    + NotePad.Notes.COLUMN_NAME_NOTE + " LIKE ?";
+            String[] selectionArgs = new String[]{
+                    "%" + mCurrentSearchQuery + "%",
+                    "%" + mCurrentSearchQuery + "%"
+            };
+
+            // 执行查询
+            filteredCursor = managedQuery(
+                    getIntent().getData(),
+                    PROJECTION,
+                    selection,
+                    selectionArgs,
+                    NotePad.Notes.DEFAULT_SORT_ORDER
+            );
+        }
+
+        // 更新适配器数据
+        CustomCursorAdapter adapter = (CustomCursorAdapter) getListAdapter();
+        adapter.changeCursor(filteredCursor);
+    }
+
+
+    // 重写状态保存方法
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        // 保存当前搜索关键词
+        outState.putString("SEARCH_QUERY", mCurrentSearchQuery);
+    }
+
+    // 重写状态恢复方法
+    @Override
+    protected void onRestoreInstanceState(Bundle savedInstanceState) {
+        super.onRestoreInstanceState(savedInstanceState);
+        // 恢复搜索状态
+        if (savedInstanceState.containsKey("SEARCH_QUERY")) {
+            mCurrentSearchQuery = savedInstanceState.getString("SEARCH_QUERY");
+            mSearchEditText.setText(mCurrentSearchQuery);
+        }
+    }
+
+
 
     /**
      * 当用户第一次点击设备的菜单按钮时调用此方法
@@ -295,14 +389,20 @@ public class NotesList extends ListActivity {
     }
 
     // 更新背景
+// 更新背景方法修改
     private void updateBackground() {
         SharedPreferences prefs = getSharedPreferences("NotePrefs", MODE_PRIVATE);
         int bgColor = prefs.getInt("bg_color", R.color.bg_light_gray);
+        int colorValue = getResources().getColor(bgColor);
 
-        // 设置列表背景
-        getListView().setBackgroundColor(getResources().getColor(bgColor));
+        // 1. 更新根布局背景
+        View rootView = findViewById(android.R.id.content);
+        rootView.setBackgroundColor(colorValue);
 
-        // 更新适配器中的背景色并刷新列表项
+        // 2. 更新列表背景（保持透明，继承根布局）
+        getListView().setBackgroundColor(Color.TRANSPARENT);
+
+        // 3. 更新适配器中的列表项背景
         CustomCursorAdapter adapter = (CustomCursorAdapter) getListAdapter();
         if (adapter != null) {
             adapter.updateBackgroundColor(bgColor);
