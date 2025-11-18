@@ -1,0 +1,8 @@
+<resources>
+    <!-- 新增列表容器样式，去除默认边距 -->
+    <style name="NoteListStyle">
+        <item name="android:padding">0dp</item>
+        <item name="android:divider">@null</item>  <!-- 去除列表分隔线 -->
+        <item name="android:dividerHeight">0dp</item>
+    </style>
+</resources>
