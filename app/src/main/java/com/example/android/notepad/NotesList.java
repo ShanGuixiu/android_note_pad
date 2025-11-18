@@ -95,13 +95,7 @@ public class NotesList extends ListActivity {
         getListView().setOnCreateContextMenuListener(this);
 
         // 获取原始游标并保存
-        mOriginalCursor = managedQuery(
-                getIntent().getData(),
-                PROJECTION,
-                null,
-                null,
-                NotePad.Notes.DEFAULT_SORT_ORDER
-        );
+        loadNotesData();
 
         // 初始化适配器（使用原始游标）
         String[] dataColumns = {
@@ -143,9 +137,25 @@ public class NotesList extends ListActivity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        // 重新加载数据以确保游标有效
+        loadNotesData();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        // 可以在这里做清理工作
+    }
+
+    @Override
     protected void onDestroy() {
         super.onDestroy();
-        // 取消注册内容观察者
+        // 清理游标
+        if (mOriginalCursor != null && !mOriginalCursor.isClosed()) {
+            mOriginalCursor.close();
+        }
         getContentResolver().unregisterContentObserver(contentObserver);
     }
 
@@ -183,13 +193,54 @@ public class NotesList extends ListActivity {
         });
     }
 
+
+    private void loadNotesData() {
+        // 直接查询而不使用 managedQuery
+        Cursor cursor = getContentResolver().query(
+                getIntent().getData(),
+                PROJECTION,
+                null,
+                null,
+                NotePad.Notes.DEFAULT_SORT_ORDER
+        );
+
+        if (mOriginalCursor != null && !mOriginalCursor.isClosed()) {
+            mOriginalCursor.close();
+        }
+        mOriginalCursor = cursor;
+
+        // 初始化或更新适配器
+        CustomCursorAdapter adapter = (CustomCursorAdapter) getListAdapter();
+        if (adapter == null) {
+            String[] dataColumns = {
+                    NotePad.Notes.COLUMN_NAME_TITLE,
+                    NotePad.Notes.COLUMN_NAME_MODIFICATION_DATE
+            };
+            int[] viewIDs = {
+                    android.R.id.text1,
+                    R.id.update_time
+            };
+
+            adapter = new CustomCursorAdapter(
+                    this,
+                    R.layout.noteslist_item,
+                    mOriginalCursor,
+                    dataColumns,
+                    viewIDs
+            );
+            setListAdapter(adapter);
+        } else {
+            adapter.changeCursor(mOriginalCursor);
+        }
+    }
+
     // 执行搜索逻辑
     private void performSearch() {
         Cursor filteredCursor;
 
         if (TextUtils.isEmpty(mCurrentSearchQuery)) {
-            // 始终创建新的游标而不是复用 mOriginalCursor
-            filteredCursor = managedQuery(
+            // 使用普通查询代替 managedQuery
+            filteredCursor = getContentResolver().query(
                     getIntent().getData(),
                     PROJECTION,
                     null,
@@ -205,8 +256,8 @@ public class NotesList extends ListActivity {
                     "%" + mCurrentSearchQuery + "%"
             };
 
-            // 执行查询
-            filteredCursor = managedQuery(
+            // 使用普通查询代替 managedQuery
+            filteredCursor = getContentResolver().query(
                     getIntent().getData(),
                     PROJECTION,
                     selection,
@@ -217,14 +268,15 @@ public class NotesList extends ListActivity {
 
         // 更新适配器数据
         CustomCursorAdapter adapter = (CustomCursorAdapter) getListAdapter();
-        // 关闭旧游标后再设置新游标
-        Cursor oldCursor = adapter.getCursor();
-        adapter.changeCursor(filteredCursor);
-        if (oldCursor != null && !oldCursor.isClosed()) {
-            oldCursor.close();
+        if (adapter != null) {
+            // 关闭旧游标后再设置新游标
+            Cursor oldCursor = adapter.getCursor();
+            adapter.changeCursor(filteredCursor);
+            if (oldCursor != null && !oldCursor.isClosed()) {
+                oldCursor.close();
+            }
         }
     }
-
 
     // 重写状态保存方法
     @Override
