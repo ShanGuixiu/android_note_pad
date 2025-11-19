@@ -460,7 +460,6 @@ public class NotesList extends ListActivity {
     private void showBackgroundChooser() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("选择背景色");
-
         // 背景选项（仅淡色系）
         final String[] bgOptions = {"浅灰", "浅蓝", "浅绿", "浅粉", "浅紫"};
         final int[] bgColors = {
@@ -493,7 +492,6 @@ public class NotesList extends ListActivity {
 
         // 2. 更新列表背景（保持透明，继承根布局）
         getListView().setBackgroundColor(Color.TRANSPARENT);
-
         // 3. 更新适配器中的列表项背景
         CustomCursorAdapter adapter = (CustomCursorAdapter) getListAdapter();
         if (adapter != null) {

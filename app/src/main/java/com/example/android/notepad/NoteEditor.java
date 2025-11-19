@@ -127,8 +127,6 @@ public class NoteEditor extends Activity {
         if (actionBar != null) {
             // 设置标题栏背景为白色
             actionBar.setBackgroundDrawable(new ColorDrawable(Color.WHITE));
-            // 设置标题字体颜色为黑色
-            actionBar.setTitle(Html.fromHtml("<font color='#000000'>" + getTitle() + "</font>"));
         }
 
         // 初始化时间格式化器（北京时间，格式：年-月-日 时:分）
@@ -376,6 +374,7 @@ public class NoteEditor extends Activity {
 
     /**
      * 设置定时提醒
+     *
      * @param triggerTime 提醒触发时间（毫秒级时间戳）
      */
     private void setReminder(long triggerTime) {
@@ -421,6 +420,7 @@ public class NoteEditor extends Activity {
             Toast.makeText(this, "Reminder set successfully", Toast.LENGTH_SHORT).show();
         }
     }
+
     /**
      * 执行粘贴操作
      * 从剪贴板获取内容并应用到当前笔记
