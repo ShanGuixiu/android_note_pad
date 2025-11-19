@@ -16,8 +16,6 @@
 
 package com.example.android.notepad;
 
-import com.example.android.notepad.NotePad;
-
 import android.app.Activity;
 import android.content.Intent;
 import android.content.Intent.ShortcutIconResource;

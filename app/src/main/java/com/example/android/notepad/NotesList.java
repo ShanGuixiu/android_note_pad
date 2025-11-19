@@ -1,5 +1,6 @@
 package com.example.android.notepad;
 
+import android.app.ActionBar;
 import android.app.AlertDialog;
 import android.app.ListActivity;
 import android.content.ClipData;
@@ -7,16 +8,17 @@ import android.content.ClipboardManager;
 import android.content.ComponentName;
 import android.content.ContentUris;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.ContentObserver;
 import android.database.Cursor;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.text.Editable;
+import android.text.Html;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.util.Log;
@@ -82,7 +84,15 @@ public class NotesList extends ListActivity {
         // 设置自定义布局
         setContentView(R.layout.notes_list);
 
-        // 原有代码保持不变...
+        // 获取ActionBar并设置样式
+        ActionBar actionBar = getActionBar();
+        if (actionBar != null) {
+            // 设置标题栏背景为白色
+            actionBar.setBackgroundDrawable(new ColorDrawable(Color.WHITE));
+            // 设置标题字体颜色为黑色
+            actionBar.setTitle(Html.fromHtml("<font color='#000000'>" + getTitle() + "</font>"));
+        }
+
         getListView().setDivider(null);
         getListView().setDividerHeight(0);
         setDefaultKeyMode(DEFAULT_KEYS_SHORTCUT);
