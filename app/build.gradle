@@ -8,6 +8,7 @@ android {
     defaultConfig {
         applicationId "com.example.android.notepad"
         minSdkVersion 11
+        //noinspection ExpiredTargetSdkVersion
         targetSdkVersion 23
 
         testApplicationId "com.example.android.notepad.tests"

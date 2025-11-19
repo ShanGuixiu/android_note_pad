@@ -26,9 +26,16 @@
     <string name="error_message">Error loading note</string>
     <string name="nothing_to_save">There is nothing to save</string>
     <string name="change_bgc">ChangeBgc</string>
-    <string name="search_placeholder">Search for title/content...</string>
+    <string name="search_placeholder">Search for title/content…</string>
     <string name="input_title">Input Title</string>
     <string name="new_note">New Note</string>
     <string name="edit_note">Edit Note</string>
     <string name="input_note_body">Input Note Body</string>
+
+    <!-- strings.xml -->
+    <string name="menu_set_reminder">Set Reminder</string>
+    <string name="notification_channel_name">Note Notification</string>
+    <string name="reminder_time_error">提醒时间必须在当前时间之后</string>
+    <string name="reminder_set">已设置提醒: %s</string>
+    <string name="untitled_note">Unnamed Notification</string>
 </resources>

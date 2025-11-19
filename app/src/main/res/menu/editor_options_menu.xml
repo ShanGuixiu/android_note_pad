@@ -12,4 +12,10 @@
           android:icon="@drawable/ic_menu_delete"
           android:title="@string/menu_delete"
           android:showAsAction="ifRoom|withText" />
+    <!-- 新增定时提醒菜单项 -->
+    <item
+        android:id="@+id/menu_set_reminder"
+        android:title="@string/menu_set_reminder"
+        android:icon="@drawable/ic_menu_alarm"
+        android:showAsAction="never" />
 </menu>

@@ -2,6 +2,10 @@ package com.example.android.notepad;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlarmManager;
+import android.app.DatePickerDialog;
+import android.app.PendingIntent;
+import android.app.TimePickerDialog;
 import android.content.ContentValues;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -16,6 +20,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.Log;
@@ -28,6 +33,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
@@ -56,6 +62,11 @@ public class NoteEditor extends Activity {
     private TextView mModifyTimeTv; // 修改时间显示
     private String mOriginalContent; // 原始内容（用于撤销）
     private SimpleDateFormat mDateFormat; // 时间格式化器
+
+    // 新增常量
+    private static final int REQUEST_SET_REMINDER = 100;
+    private static final String REMINDER_ACTION = "com.example.android.notepad.REMINDER";
+
 
     /**
      * 带线条的自定义编辑框
@@ -319,10 +330,85 @@ public class NoteEditor extends Activity {
         } else if (id == R.id.menu_revert) {
             cancelNote();
             return true;
+        } else if (id == R.id.menu_set_reminder) {
+            // 点击"Set Reminder"，打开时间选择对话框
+            showTimePickerDialog();
+            return true;
         }
         return super.onOptionsItemSelected(item);
     }
 
+    /**
+     * 显示时间选择对话框
+     */
+    private void showTimePickerDialog() {
+        // 获取当前时间作为默认值
+        Calendar calendar = Calendar.getInstance();
+        int year = calendar.get(Calendar.YEAR);
+        int month = calendar.get(Calendar.MONTH);
+        int day = calendar.get(Calendar.DAY_OF_MONTH);
+        int hour = calendar.get(Calendar.HOUR_OF_DAY);
+        int minute = calendar.get(Calendar.MINUTE);
+
+        // 创建日期时间选择对话框
+        new DatePickerDialog(this, (view, selectedYear, selectedMonth, selectedDay) -> {
+            // 日期选择后，显示时间选择
+            new TimePickerDialog(this, (timeView, selectedHour, selectedMinute) -> {
+                // 构建选中的日期时间
+                Calendar selectedTime = Calendar.getInstance();
+                selectedTime.set(selectedYear, selectedMonth, selectedDay, selectedHour, selectedMinute);
+                setReminder(selectedTime.getTimeInMillis()); // 设置提醒
+            }, hour, minute, true).show();
+        }, year, month, day).show();
+    }
+
+    /**
+     * 设置定时提醒
+     * @param triggerTime 提醒触发时间（毫秒级时间戳）
+     */
+    private void setReminder(long triggerTime) {
+        // 获取当前笔记的标题和内容
+        String title = mTitleText.getText().toString().trim();
+        String content = mContentText.getText().toString().trim();
+        if (TextUtils.isEmpty(title)) {
+            title = getString(R.string.untitled_note); // 无标题时使用默认值
+        }
+
+        // 创建提醒意图（触发NotificationReceiver）
+        Intent intent = new Intent(this, NotificationReceiver.class);
+        intent.setAction(REMINDER_ACTION);
+        intent.putExtra("title", title);
+        intent.putExtra("content", content);
+        intent.setData(mUri); // 传递笔记URI，点击通知可打开对应笔记
+
+        // 创建PendingIntent
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(
+                this,
+                (int) System.currentTimeMillis(), // 用时间戳作为唯一标识
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+
+        // 使用AlarmManager设置定时任务
+        AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+        if (alarmManager != null) {
+            // 根据系统版本设置提醒（适配Android 12+）
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB_MR1) {
+                alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerTime,
+                        pendingIntent
+                );
+            } else {
+                alarmManager.setExact(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerTime,
+                        pendingIntent
+                );
+            }
+            Toast.makeText(this, "Reminder set successfully", Toast.LENGTH_SHORT).show();
+        }
+    }
     /**
      * 执行粘贴操作
      * 从剪贴板获取内容并应用到当前笔记
